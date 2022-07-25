@@ -17,6 +17,7 @@ from transformers import AutoModel
 from tokenizer import Tokenizer
 from utils import mask_fill
 
+import datasets
 
 class Classifier(pl.LightningModule):
     """
@@ -28,14 +29,31 @@ class Classifier(pl.LightningModule):
     class DataModule(pl.LightningDataModule):
         def __init__(self, classifier_instance):
             super().__init__()
+            #datasets.config.IN_MEMORY_MAX_SIZE = 
             self.hparams = classifier_instance.hparams
             self.classifier = classifier_instance
+
+            self.dataset = "TODO" # TODO: load datset here
+            self.train_dataset = datasets.load_dataset(self.hparams.hf_dataset, split=datasets.ReadInstruction('train', to=60, unit='%')) # TODO remove
+
             # Label Encoder
-            self.label_encoder = LabelEncoder(
-                pd.read_csv(self.hparams.train_csv).label.astype(str).unique().tolist(),
-                reserved_labels=[],
-            )
+            self.label_encoder = self.get_label_encoder()
             self.label_encoder.unknown_index = None
+
+        def get_label_encoder(self):
+            if self.hparams.train_csv != None:
+                label_enc = LabelEncoder(
+                    self._convert_to_dict(pd.read_csv(self.hparams.train_csv)).label.astype(str).unique().tolist(),
+                    reserved_labels=[],
+                )
+                return label_enc
+            elif self.hparams.hf_dataset != None:
+                label_enc = LabelEncoder(
+                    self.train_dataset.features["label"].names,
+                    reserved_labels=[],
+                )
+            else:
+                raise RuntimeError("no suitable dataset found")
 
         def read_csv(self, path: str) -> list:
             """Reads a comma separated value file.
@@ -48,7 +66,44 @@ class Classifier(pl.LightningModule):
             df = df[["text", "label"]]
             df["text"] = df["text"].astype(str)
             df["label"] = df["label"].astype(str)
+            return df
+
+        def _convert_to_dict(self, df):
             return df.to_dict("records")
+
+        def _get_hf_dataset_for_split(self, split: str, ds_name: str):
+            if split == "train":
+                    train_ri = datasets.ReadInstruction('train', to=60, unit='%')
+                    train_ds = datasets.load_dataset(ds_name, split=train_ri)
+                    return train_ds
+            elif split == "val":
+                val_ri = datasets.ReadInstruction('train', from_=60, unit='%')
+                val_ds = datasets.load_dataset(ds_name, split=val_ri)
+                return val_ds
+            elif split == "test":
+                test_ri = datasets.ReadInstruction('test')
+                test_ds = datasets.load_dataset(ds_name, split=test_ri)
+                return test_ds.to_dict
+            else:
+                raise RuntimeError("split type not known")
+
+        def get_dataset_as_dict(self, split):
+            ds_name = self.hparams.hf_dataset
+            if ds_name != None:
+                assert(split != None)
+                df = self.get_hf_dataset_for_split(split)
+                return self._convert_to_dict(df)
+
+            elif self.hparams.train_csv != None:
+                df = self.read_csv(self.hparams.train_csv)
+                return self._convert_to_dict(df)
+            elif self.hparams.dev_csv != None:
+                df = self.read_csv(self.hparams.dev_csv)
+                return self._convert_to_dict(df)
+            elif self.hparams.test_csv != None:
+                df = self.read_csv(self.hparams.test_csv)
+                return self._convert_to_dict(df)
+            raise RuntimeError("no suitable dataset found")
 
         def train_dataloader(self) -> DataLoader:
             """Function that loads the train set."""
@@ -390,7 +445,13 @@ class Classifier(pl.LightningModule):
             "--test_csv",
             default="data/imdb_reviews_test.csv",
             type=str,
-            help="Path to the file containing the dev data.",
+            help="Path to the file containing the test data.",
+        )
+        parser.add_argument(
+            "--hf_dataset",
+            default="imdb",
+            type=str,
+            help="Name of the hf dataset to use for train, test & dev.",
         )
         parser.add_argument(
             "--loader_workers",

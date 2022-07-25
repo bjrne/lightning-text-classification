@@ -88,6 +88,19 @@ python training.py \
     --dev_csv data/MP2_dev.csv \
 ```
 
+or 
+
+```bash
+python training.py \
+    --gpus 0 \
+    --batch_size 32 \
+    --accumulate_grad_batches 1 \
+    --loader_workers 2 \
+    --nr_frozen_epochs 1 \
+    --encoder_model distilbert-base-uncased \
+    --hf_dataset imdb
+```
+
 Testing the model:
 ```bash
 python test.py --experiment experiments/version_{date} --test_data data/MP2_dev.csv

@@ -8,7 +8,7 @@ from datetime import datetime
 from classifier import Classifier
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
-from pytorch_lightning.loggers import LightningLoggerBase, TensorBoardLogger
+from pytorch_lightning.loggers import LightningLoggerBase, TensorBoardLogger, WandbLogger
 from torchnlp.random import set_seed
 
 
@@ -44,6 +44,8 @@ def main(hparams) -> None:
         name="",
     )
 
+    wandb_logger = WandbLogger(project="test-text-classification")
+
     # Model Checkpoint Callback
     ckpt_path = os.path.join(
         "experiments/",
@@ -68,7 +70,7 @@ def main(hparams) -> None:
     # 5 INIT TRAINER
     # ------------------------
     trainer = Trainer(
-        logger=tb_logger,
+        logger=wandb_logger,
         checkpoint_callback=True,
         early_stop_callback=early_stop_callback,
         gradient_clip_val=1.0,
